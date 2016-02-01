@@ -1,5 +1,7 @@
 package com.pierangeloc.exercises
 
+import scala.collection.immutable.IndexedSeq
+
 object Sudoku extends App {
 
   //define sudoku for arbitrary alphabets
@@ -12,18 +14,55 @@ object Sudoku extends App {
   def blank(c: Char) = c == '.'
 
   val example: Board = (for {
-    r <- 1 to 9
-    c <- 1 to 9
+    r <- 1 to boardSize
+    c <- 1 to boardSize
   } yield (r * 10 + c).toString).toList.grouped(boardSize).toList
 
-  def asString[A](m: Matrix[A]) = {
-    for {
+  def asString[A](m: Matrix[A]): String = {
+    (for {
       row <- m
-    } row.mkString(" ")
-    .mkString("\n")
+    } yield row.mkString(" ")
+    ).mkString("\n")
   }
 
-  println((example))
+
+  def rows[A](b: Matrix[A]): Matrix[A] = b
+
+  def transpose[A](m: Matrix[A]): Matrix[A] = m match {
+    case row :: Nil => row.map(List(_))
+    case row :: rows => (row, transpose(rows)).zipped.map(_ :: _)
+    case mx => mx
+  }
+
+  def cols[A](b: Matrix[A]) = transpose(b)
+
+  def ungroup[A](b: Matrix[A]): List[A] = b.flatten
+  def group[A](l: List[A]): Matrix[A] = l.grouped(boxSize).toList
+
+  def box[A](b: Matrix[A])(i: Int, j: Int): Matrix[A] = {
+    val firstRowIndex = i * boxSize
+    val firstColIndex = j * boxSize
+
+    val cells: IndexedSeq[A] = for {
+      row <- 0 until boxSize
+      col <- 0 until boxSize
+    } yield b(firstRowIndex + row)(firstColIndex + col)
+
+    group(cells.toList)
+  }
+
+  def boxes[A](b: Matrix[A]): List[Matrix[A]] = {
+    (for {
+      i <- 0 until boxSize
+      j <- 0 until boxSize
+    } yield box(b)(i, j)
+      ).toList
+  }
+
+
+  println("sudoku simple: " + example)
+  println("formatted:\n"  + asString(example))
+
   /**
     * determine when a sudoku is correct:
     * - no blanks
@@ -39,40 +78,7 @@ object Sudoku extends App {
     case x :: xs => !(xs contains x) && noDups(xs)
   }
 
-  def rows[A](b: Matrix[A]): Matrix[A] = b
-
-  def transpose[A](m: Matrix[A]): Matrix[A] = m match {
-    case row :: Nil => row.map(List(_))
-    case row :: rows => (row, transpose(rows)).zipped.map(_ :: _)
-    case mx => mx
-  }
-
-  def cols[A](b: Matrix[A]) = transpose(b)
-
-  def ungroup[A](b: Matrix[A]): List[A] = b.flatten
-  def group[A](l: List[A]): Matrix[A] = l.grouped(boxSize).toList
-
-
-  def boxes[A](b: Matrix[A]) = {
-    val grouped = group(ungroup(b))
-    val res = for {
-      i <- 0 to boxSize
-      residual <- grouped.drop(i)
-    } yield residual
-    println(res)
-    ???
-  }
-  println("Pierangelo".updated(5,'K'))
 
 
 
-  //test
-  val A = List(List(1,2,3),
-                List(4,5,6),
-                List(7,8,9))
-  println(A)
-  println(transpose(A))
-  println(group(ungroup(A)))
-  println(ungroup(A))
-  println (group(1 to 81 toList))
 }
