@@ -5,72 +5,68 @@ import scala.collection.immutable.IndexedSeq
 object Sudoku {
 
   //define sudoku for arbitrary alphabets
-  type Matrix[A] = List[List[A]]
+
+  class Matrix[A] (rowsSeq: List[List[A]], val boardSize: Int = 9, val boxSize: Int = 3) {
+
+    val rows: Vector[Vector[A]] = rowsSeq.toVector.map(_.toVector)
+    def transpose(): Matrix[A] = {
+
+      def transposeAsList(m: List[List[A]]): List[List[A]] = m match {
+        case r :: Nil => r.map(List(_))
+        case r :: rs => (r, transposeAsList(rs)).zipped.map(_ :: _)
+        case mx => mx
+      }
+
+      new Matrix(transposeAsList(rowsSeq))
+    }
+
+    lazy val cols = transpose().rows
+
+    override def toString = {
+      (for {
+        row <- rows
+      } yield row.mkString(" ")
+        ).mkString("\n")
+    }
+
+    lazy val ungroup: Vector[A] = rows.flatten
+    lazy val withPositionsMap: Map[Pos, A] = withPositions.ungroup.map {case (c, pos) => (pos, c)} .toMap
+
+    private def group[B](l: Seq[B]): Matrix[B] = new Matrix(l.toList.grouped(boxSize).toList)
+
+    lazy val withPositions: Matrix[(A, Pos)] = {
+      group(ungroup.zipWithIndex.map { case (a, ix) => (a, Pos(ix / boardSize, ix % boardSize))})
+    }
+
+    /**
+      * Determine the box on a given position. boxes have position (0,0), (0,1), (0,2), (1,0), (1,1), ... ,(2,2)
+      * TODO: memoize
+      */
+    def box(p: Pos): Matrix[A] = {
+      val firstRowIndex = p.i * boxSize
+      val firstColIndex = p.j * boxSize
+
+      val cells: IndexedSeq[A] = for {
+        row <- 0 until boxSize
+        col <- 0 until boxSize
+      } yield rows(firstRowIndex + row)(firstColIndex + col)
+
+      group(cells.toList)
+    }
+
+    def map[B](f: A => B): Matrix[B] = new Matrix(rows.map(_.map(f).toList).toList)
+
+    lazy val boxes: Map[Pos, Matrix[A]] = withPositions.ungroup.groupBy {case (a, pos) => Pos(pos.i / boxSize, pos.j / boxSize)} map {case (boxPosition, boxElements) => (boxPosition, group(boxElements map {case (elem, p) => elem}))}
+
+    def boxForElement(p: Pos): Matrix[A] = boxes(Pos(p.i / boxSize, p.j / boxSize))
+
+  }
+
   type Board = Matrix[Char]
 
   //position, 0-based, of a cell
   case class Pos(i: Int, j: Int)
 
-  val boardSize = 9
-  val boxSize = 3
-  val cellValues = "123456789".toList
-  def blank(c: Char) = c == '.'
-
-  val example: Board = (for {
-    r <- 1 to boardSize
-    c <- 1 to boardSize
-  } yield (' ' + r * 10 + c).toChar).toList.grouped(boardSize).toList
-
-  def asString[A](m: Matrix[A]): String = {
-    (for {
-      row <- m
-    } yield row.mkString(" ")
-    ).mkString("\n")
-  }
-
-
-
-  def ungroup[A](b: Matrix[A]): List[A] = b.flatten
-  def group[A](l: List[A]): Matrix[A] = l.grouped(boxSize).toList
-  def withPositions[A](b: Matrix[A]): Matrix[(A, Pos)] = {
-    group(ungroup(b).zipWithIndex.map { case (a, ix) => (a, Pos(ix / boardSize, ix % boardSize))})
-  }
-
-  def box[A](b: Matrix[A])(p: Pos): Matrix[A] = {
-    val firstRowIndex = p.i * boxSize
-    val firstColIndex = p.j * boxSize
-
-    val cells: IndexedSeq[A] = for {
-      row <- 0 until boxSize
-      col <- 0 until boxSize
-    } yield b(firstRowIndex + row)(firstColIndex + col)
-
-    group(cells.toList)
-  }
-
-  def boxForElement[A](b: Matrix[A])(p: Pos): Matrix[A] = box(b)(p.i / boxSize, p.j / boxSize)
-
-  def rows[A](b: Matrix[A]): Matrix[A] = b
-
-  def transpose[A](m: Matrix[A]): Matrix[A] = m match {
-    case row :: Nil => row.map(List(_))
-    case row :: rows => (row, transpose(rows)).zipped.map(_ :: _)
-    case mx => mx
-  }
-
-  def cols[A](b: Matrix[A]) = transpose(b)
-
-  //boxes are numbered as 00,01,02,10,11,12,20,21,22
-  def allBoxes[A](b: Matrix[A]): List[Matrix[A]] = {
-    (for {
-      i <- 0 until boxSize
-      j <- 0 until boxSize
-    } yield box(b)(i, j)
-      ).toList
-  }
-
-  println("sudoku simple: " + example)
-  println("formatted:\n"  + asString(example))
 
   /**
     * determine when a sudoku is correct:
@@ -80,9 +76,12 @@ object Sudoku {
     * - no duplicates along boxes
     */
    val blank = '0'
-   def complete(b: Board) = !ungroup(b).contains('0') &&
-                                rows(b).forall(row => !row.contains(blank) && row.distinct.size == boardSize) &&
-                                cols(b).forall(col => !col.contains(blank) && col.distinct.size == boardSize)
+   val boardSize = 9
+   val cellValues = "123456789".toList
+
+   def complete(b: Board) = !b.ungroup.contains('0') &&
+                                b.rows.forall(row => !row.contains(blank) && row.distinct.size == boardSize) &&
+                                b.cols.forall(col => !col.contains(blank) && col.distinct.size == boardSize)
 
   /** Determine if a list contains duplicates**/
   def noDups[A](as: List[A]): Boolean = as match {
@@ -90,19 +89,43 @@ object Sudoku {
     case x :: xs => !(xs contains x) && noDups(xs)
   }
 
+  //for every element in the board, map it to a singleton list if it is assigned, otherwise replace it with the list of all possible options for that element, compatible with the board
   def expand(m: Board): Matrix[List[Char]] = {
-    val withPos: Matrix[(Char, Pos)] = withPositions(m)
+    def choices(b: Matrix[(Char, Pos)], p: Pos): List[Char] = {
+      //horrible code!
+      val charAndPos: (Char, Pos) = b.withPositionsMap(p)
+      if (! (blank == charAndPos._1)) List(charAndPos._1)
+      else {
+        val rowVals = b.rows(p.i) filter {case (c, rowPos) => c != blank } map {case (c, _) => c}
+        val colVals = b.cols(p.j) filter {case (c, colPos) => c != blank } map {case (c, _) => c}
+        val boxVals = b.map {case (c, pos) => c} .boxForElement(p).ungroup filter(_ != blank)
 
-    def choices(b: Matrix[(Char, Pos)], p: Pos) = {
-      val cell: (Char, Pos) = ungroup(b).find {case (c, pos) => p == pos}.get
-      cellValues.diff(rows(b)(p.i).filter {case (c, pos) => !blank(c)}) ++
-      cellValues.diff(cols(b)(p.j).filter {case (c, pos) => !blank(c)}) ++
-      cellValues.diff(boxForElement(b)(p).filter {case (c, pos) => !blank(c)})
+        (cellValues.toSet -- (rowVals.toSet ++ colVals.toSet ++ boxVals.toSet)).toList
+      }
     }
 
-    ???
+    val boardWithPositions: Matrix[(Char, Pos)] = m.withPositions
+    boardWithPositions.map {case (c, pos) => choices(boardWithPositions, pos)}
   }
 
 
+  //given a list of lists returns the list of all possible combinations obtained selecting each element from each list
+  def cartProd[A](listOfLists: List[List[A]]): List[List[A]] = listOfLists match {
+    case Nil => List(Nil)
+    case xs :: xss => for {
+      x <- xs
+      ys <- cartProd(xss)
+    } yield x :: ys
+  }
+
+  def fromString(table: String): Board = {
+    new Matrix(table.filter(_.isDigit).toList.grouped(9).toList)
+  }
+  def solve(b: Board): List[Matrix[Char]] = {
+    cartProd(expand(b).ungroup.toList)
+      .map(_.grouped(boardSize).toList)
+      .map(new Matrix(_))
+      .filter(complete)
+  }
 
 }
