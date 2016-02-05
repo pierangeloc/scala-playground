@@ -23,16 +23,16 @@ object Sudoku {
     lazy val cols = transpose().rows
 
     override def toString = {
-      (for {
+      "|" + (for {
         row <- rows
       } yield row.mkString(" ")
-        ).mkString("\n")
+        ).mkString("\n") + "|"
     }
 
     lazy val ungroup: Vector[A] = rows.flatten
     lazy val withPositionsMap: Map[Pos, A] = withPositions.ungroup.map {case (c, pos) => (pos, c)} .toMap
 
-    private def group[B](l: Seq[B]): Matrix[B] = new Matrix(l.toList.grouped(boxSize).toList)
+    private def group[B](l: Seq[B]): Matrix[B] = new Matrix(l.toList.grouped(boardSize).toList)
 
     lazy val withPositions: Matrix[(A, Pos)] = {
       group(ungroup.zipWithIndex.map { case (a, ix) => (a, Pos(ix / boardSize, ix % boardSize))})
@@ -79,30 +79,25 @@ object Sudoku {
    val boardSize = 9
    val cellValues = "123456789".toList
 
-   def complete(b: Board) = !b.ungroup.contains('0') &&
-                                b.rows.forall(row => !row.contains(blank) && row.distinct.size == boardSize) &&
-                                b.cols.forall(col => !col.contains(blank) && col.distinct.size == boardSize)
+   def complete(b: Board) = !b.ungroup.contains(blank) &&
+                                b.rows.forall(row => row.distinct.size == boardSize) &&
+                                b.cols.forall(col => col.distinct.size == boardSize)
 
-  /** Determine if a list contains duplicates**/
-  def noDups[A](as: List[A]): Boolean = as match {
-    case Nil => true
-    case x :: xs => !(xs contains x) && noDups(xs)
+
+  def choices(b: Matrix[(Char, Pos)], p: Pos): List[Char] = {
+    //horrible code!
+    val charAndPos: (Char, Pos) = b.withPositionsMap(p)
+    if (! (blank == charAndPos._1)) List(charAndPos._1)
+    else {
+      val rowVals = b.rows(p.i) filter {case (c, rowPos) => c != blank } map {case (c, _) => c}
+      val colVals = b.cols(p.j) filter {case (c, colPos) => c != blank } map {case (c, _) => c}
+      val boxVals = b.map {case (c, pos) => c} .boxForElement(p).ungroup filter(_ != blank)
+      (cellValues.toSet -- (rowVals.toSet ++ colVals.toSet ++ boxVals.toSet)).toList
+    }
   }
-
   //for every element in the board, map it to a singleton list if it is assigned, otherwise replace it with the list of all possible options for that element, compatible with the board
   def expand(m: Board): Matrix[List[Char]] = {
-    def choices(b: Matrix[(Char, Pos)], p: Pos): List[Char] = {
-      //horrible code!
-      val charAndPos: (Char, Pos) = b.withPositionsMap(p)
-      if (! (blank == charAndPos._1)) List(charAndPos._1)
-      else {
-        val rowVals = b.rows(p.i) filter {case (c, rowPos) => c != blank } map {case (c, _) => c}
-        val colVals = b.cols(p.j) filter {case (c, colPos) => c != blank } map {case (c, _) => c}
-        val boxVals = b.map {case (c, pos) => c} .boxForElement(p).ungroup filter(_ != blank)
 
-        (cellValues.toSet -- (rowVals.toSet ++ colVals.toSet ++ boxVals.toSet)).toList
-      }
-    }
 
     val boardWithPositions: Matrix[(Char, Pos)] = m.withPositions
     boardWithPositions.map {case (c, pos) => choices(boardWithPositions, pos)}

@@ -31,16 +31,18 @@ val table2 = """
                |248957136
                |763418259
              """.stripMargin
+val easy: Board = fromString(table2)
 solve(fromString(table2))
-//val table3 = """
-//              |000260701
-//              |680070093
-//              |190004500
-//              |820100040
-//              |004602900
-//              |050003028
-//              |009300074
-//              |040050036
-//              |703018000
-//            """.stripMargin
-//solve(fromString(table3))
+val table3 = """
+              |000260701
+              |680070093
+              |190004500
+              |820100040
+              |004602900
+              |050003028
+              |009300074
+              |040050036
+              |703018000
+            """.stripMargin
+solve(fromString(table3))
+
