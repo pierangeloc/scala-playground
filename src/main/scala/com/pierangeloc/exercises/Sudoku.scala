@@ -2,11 +2,12 @@ package com.pierangeloc.exercises
 
 import scala.collection.immutable.IndexedSeq
 
-object Sudoku {
+object Sudoku {//} extends App{
 
   //define sudoku for arbitrary alphabets
 
   class Matrix[A] (rowsSeq: List[List[A]], val boardSize: Int = 9, val boxSize: Int = 3) {
+    import Matrix._
 
     val rows: Vector[Vector[A]] = rowsSeq.toVector.map(_.toVector)
     def transpose(): Matrix[A] = {
@@ -23,19 +24,17 @@ object Sudoku {
     lazy val cols = transpose().rows
 
     override def toString = {
-      "|" + (for {
+      "\n" + (for {
         row <- rows
-      } yield row.mkString(" ")
-        ).mkString("\n") + "|"
+      } yield "|" + row.mkString(" ") + "|"
+        ).mkString("\n")
     }
 
     lazy val ungroup: Vector[A] = rows.flatten
-    lazy val withPositionsMap: Map[Pos, A] = withPositions.ungroup.map {case (c, pos) => (pos, c)} .toMap
+    lazy val withPositionsMap: Map[Pos, A] = withPositions.ungroup.toMap
 
-    private def group[B](l: Seq[B]): Matrix[B] = new Matrix(l.toList.grouped(boardSize).toList)
-
-    lazy val withPositions: Matrix[(A, Pos)] = {
-      group(ungroup.zipWithIndex.map { case (a, ix) => (a, Pos(ix / boardSize, ix % boardSize))})
+    lazy val withPositions: Matrix[(Pos, A)] = {
+      group(ungroup.zipWithIndex.map { case (a, ix) => (Pos(ix / boardSize, ix % boardSize), a)})
     }
 
     /**
@@ -56,16 +55,28 @@ object Sudoku {
 
     def map[B](f: A => B): Matrix[B] = new Matrix(rows.map(_.map(f).toList).toList)
 
-    lazy val boxes: Map[Pos, Matrix[A]] = withPositions.ungroup.groupBy {case (a, pos) => Pos(pos.i / boxSize, pos.j / boxSize)} map {case (boxPosition, boxElements) => (boxPosition, group(boxElements map {case (elem, p) => elem}))}
+    lazy val boxes: Map[Pos, Matrix[A]] = withPositions.ungroup
+                                              .groupBy {case (pos, a) => Pos(pos.i / boxSize, pos.j / boxSize)}
+                                              .map {case (boxPosition, boxElements) => (boxPosition, group(boxElements map {case (p, elem) => elem}))}
 
     def boxForElement(p: Pos): Matrix[A] = boxes(Pos(p.i / boxSize, p.j / boxSize))
 
+  }
+
+  object Matrix {
+    def group[B](l: Seq[B]): Matrix[B] = new Matrix(l.toList.grouped(boardSize).toList)
+
+    //make a matrix out of a matrix of (Pos,A)
+    def convert[A](withPositions: List[(Pos, A)]): Matrix[A] = {
+      group(withPositions.sortBy {case (pos, c) => (pos.i, pos.j)} .map {case(p, a) => a})
+    }
   }
 
   type Board = Matrix[Char]
 
   //position, 0-based, of a cell
   case class Pos(i: Int, j: Int)
+
 
 
   /**
@@ -84,29 +95,29 @@ object Sudoku {
                                 b.cols.forall(col => col.distinct.size == boardSize)
 
 
-  def choices(b: Matrix[(Char, Pos)], p: Pos): List[Char] = {
+  def choices(b: Matrix[(Pos, Char)], p: Pos): List[Char] = {
     //horrible code!
-    val charAndPos: (Char, Pos) = b.withPositionsMap(p)
-    if (! (blank == charAndPos._1)) List(charAndPos._1)
+    val charAndPos: (Pos, Char) = b.withPositionsMap(p)
+    if (! (blank == charAndPos._2)) List(charAndPos._2)
     else {
-      val rowVals = b.rows(p.i) filter {case (c, rowPos) => c != blank } map {case (c, _) => c}
-      val colVals = b.cols(p.j) filter {case (c, colPos) => c != blank } map {case (c, _) => c}
-      val boxVals = b.map {case (c, pos) => c} .boxForElement(p).ungroup filter(_ != blank)
+      val rowVals = b.rows(p.i) filter {case (rowPos, c) => c != blank } map {case (_, c) => c}
+      val colVals = b.cols(p.j) filter {case (colPos, c) => c != blank } map {case (_, c) => c}
+      val boxVals = b.map {case (pos, c) => c} .boxForElement(p).ungroup filter(_ != blank)
       (cellValues.toSet -- (rowVals.toSet ++ colVals.toSet ++ boxVals.toSet)).toList
     }
   }
+
   //for every element in the board, map it to a singleton list if it is assigned, otherwise replace it with the list of all possible options for that element, compatible with the board
-  def expand(m: Board): Matrix[List[Char]] = {
-
-
-    val boardWithPositions: Matrix[(Char, Pos)] = m.withPositions
-    boardWithPositions.map {case (c, pos) => choices(boardWithPositions, pos)}
+  def expand(m: Board): Matrix[(Pos, List[Char])] = {
+    val boardWithPositions: Matrix[(Pos, Char)] = m.withPositions
+    boardWithPositions.map {case (pos, c) => (pos, choices(boardWithPositions, pos))}
   }
 
 
   //given a list of lists returns the list of all possible combinations obtained selecting each element from each list
-  def cartProd[A](listOfLists: List[List[A]]): List[List[A]] = listOfLists match {
-    case Nil => List(Nil)
+  var combNr = 0
+  def cartProd[A](listOfLists: List[Stream[A]]): Stream[List[A]] = listOfLists match {
+    case Nil => Stream(Nil)
     case xs :: xss => for {
       x <- xs
       ys <- cartProd(xss)
@@ -116,11 +127,25 @@ object Sudoku {
   def fromString(table: String): Board = {
     new Matrix(table.filter(_.isDigit).toList.grouped(9).toList)
   }
-  def solve(b: Board): List[Matrix[Char]] = {
-    cartProd(expand(b).ungroup.toList)
-      .map(_.grouped(boardSize).toList)
-      .map(new Matrix(_))
-      .filter(complete)
+  def solve(b: Board): Matrix[Char] = {
+
+    val listOfStreams: List[Stream[(Pos, Char)]] = expand(b).ungroup.toList.sortBy {case (pos, list) => list.length} .map {case(pos, list) => list.map(c => (pos, c)).toStream}
+    val streamOfLists: Stream[List[(Pos, Char)]] = cartProd(listOfStreams)
+
+    streamOfLists.map(Matrix.convert).filter(complete).head
   }
 
+//
+//  val table3 = """
+//                 |000260701
+//                 |680070093
+//                 |190004500
+//                 |820100040
+//                 |004602900
+//                 |050003028
+//                 |009300074
+//                 |040050036
+//                 |703018000
+//               """.stripMargin
+//  println(solve(fromString(table3)))
 }
