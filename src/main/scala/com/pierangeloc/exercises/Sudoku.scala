@@ -90,9 +90,10 @@ object Sudoku {//} extends App{
    val boardSize = 9
    val cellValues = "123456789".toList
 
-   def complete(b: Board) = !b.ungroup.contains(blank) &&
-                                b.rows.forall(row => row.distinct.size == boardSize) &&
-                                b.cols.forall(col => col.distinct.size == boardSize)
+  def complete(b: Board) = b.rows.forall(row => row.distinct.size == boardSize) &&
+                           b.cols.forall(col => col.distinct.size == boardSize) &&
+                           !b.ungroup.contains(blank)
+
 
 
   def choices(b: Matrix[(Pos, Char)], p: Pos): List[Char] = {
@@ -116,23 +117,37 @@ object Sudoku {//} extends App{
 
   //given a list of lists returns the list of all possible combinations obtained selecting each element from each list
   var combNr = 0
-  def cartProd[A](listOfLists: List[Stream[A]]): Stream[List[A]] = listOfLists match {
+  //the pruning function informs us on how we should filter the subsequent streams from the current value of the stream
+  def cartProd[A](listOfLists: List[Stream[A]])(pruning: (A) => (A) => Boolean = (a: A)  => (b: A) => true): Stream[List[A]] = listOfLists match {
     case Nil => Stream(Nil)
     case xs :: xss => for {
       x <- xs
-      ys <- cartProd(xss)
+      ys <- cartProd(xss.map(_.filter(pruning(x))))(pruning)
     } yield x :: ys
   }
 
   def fromString(table: String): Board = {
-    new Matrix(table.filter(_.isDigit).toList.grouped(9).toList)
+    new Matrix((table filter (_.isDigit)).toList.grouped(9).toList)
   }
-  def solve(b: Board): Matrix[Char] = {
 
+  def solve(b: Board): Matrix[Char] = {
     val listOfStreams: List[Stream[(Pos, Char)]] = expand(b).ungroup.toList.sortBy {case (pos, list) => list.length} .map {case(pos, list) => list.map(c => (pos, c)).toStream}
-    val streamOfLists: Stream[List[(Pos, Char)]] = cartProd(listOfStreams)
+
+    //this function is key for performance boost
+    def pruning(currentPosAndChar: (Pos, Char))(nextPosAndChar: (Pos, Char)): Boolean = {
+      val (currentPosition, currentChar) = currentPosAndChar
+      val (nextPosition, nextChar) = nextPosAndChar
+      (currentPosition, nextPosition) match {
+        case (Pos(curRow, curCol), Pos(nextRow, nextCol)) if curRow == nextRow => currentChar != nextChar
+        case (Pos(curRow, curCol), Pos(nextRow, nextCol)) if curCol == nextCol => currentChar != nextChar
+        //TODO: improve by removing also elements in the same box
+        case _ => true
+      }
+    }
+    val streamOfLists: Stream[List[(Pos, Char)]] = cartProd(listOfStreams)(pruning)
 
     streamOfLists.map(Matrix.convert).filter(complete).head
+
   }
 
 //
