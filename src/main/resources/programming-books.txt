@@ -1,0 +1,26 @@
+The C Programming Language|Brian W. Kernighan, Dennis M. Ritchie|C 
+C Programming: A Modern Approach|K.N. King|C
+C Programming in 12 Easy Lessons|Greg Perry|C
+C for Dummies Vol. I|Dan Gookin|C
+C for Dummies Vol. II|by Dan Gookin|C
+The Java Language Specification|James Gosling , Bill Joy, Guy Steele|Java
+Thinking in Java|Bruce Eckel|Java
+Concurrent Programming in Java: Design Principles and Patterns|Doug Lea|Java
+The Java Virtual Machine Specification|Tim Lindholm, Frank Yellin, Bill Joy, Kathy Walrath|Java
+Java in a Nutshell: A Desktop Quick Reference for Java Programmers|David Flanagan|Java
+The Java AWT Reference|John Zukowski|Java
+Programming in Scala, 2nd ed.|Martin Odersky, Lex Spoon, and Bill Venners|Scala
+Scala for the Impatient|Cay S. Horstmann|Scala
+Scala in Depth|Joshua D. Suereth|Scala
+Scala in Action|Nilanjan Raychaudhuri|Scala
+Programming Scala|Alex Payne and Dean Wampler|Scala
+Learning Concurrent Programming in Scala|Aleksandar Prokopec|Scala
+Scala for Data Science|Pascal Bugnion|Scala
+Functional Programming in Scala|Rúnar Bjarnason, Paul Chiusano|Scala
+Clojure In Action|Amit Rathore|Clojure
+Clojure for the Brave and True|Daniel Higginbotham|Clojure
+Clojure for Data Science|Henry Garner|Clojure
+Clojure High Performance Programming|Shantanu Kumar|Clojure
+Clojure Reactive Programming|Leonardo Borges|Clojure
+The Joy of Clojure|Michael Fogus, Chris Houser|Clojure
+Sbt in Action|Joshua D. Suereth|Scala
